@@ -17,7 +17,7 @@
 
 int do_connect(int port);
 float get_temperature();
-void* monitoring_temperature();
+void* print_temperature();
 bool air_conditioning(bool status);
 void down_client();
 void gotoxy(int x, int y);
@@ -34,6 +34,7 @@ int socket_descriptor_air = 0;
 
 int main(int argc, char *argv[])
 {
+	// Trata o sinal de interrupcao
 	signal(SIGINT, down_client);
 
 	switch (argc)
@@ -47,6 +48,8 @@ int main(int argc, char *argv[])
 			errx(1, "Argumentos invalidos!!");
 			break;
 	}
+
+	// cria as threads de tempo de execucao e de requisicao de temperatura e o mutex para acessar a temperatura
 	pthread_t time_thread;
 
 	if(pthread_create(&time_thread, NULL, running_time, NULL))
@@ -61,15 +64,17 @@ int main(int argc, char *argv[])
 		errx(1, "Erro ao criar o mutex");
 	}
 
-	if(pthread_create(&temperature_thread, NULL, monitoring_temperature, NULL))
+	if(pthread_create(&temperature_thread, NULL, print_temperature, NULL))
 	{
 		errx(1, "Erro ao criar a thread");
 	}
 
 	system("clear");
 
-	struct winsize w;
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
+	struct winsize w; // Estrutura para armazenar o tamanho da janela do terminal
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w); // Seta os valores de tamanho da tela na estrutura winsize
+
+	// seta a posicao do cursor
 	gotoxy(w.ws_col / 2 - 12, 0);
 	printf("Ar Condicionado: Desligado");
 	
@@ -93,12 +98,14 @@ int main(int argc, char *argv[])
 					
 					ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
 					
+					// salva a posicao atual do cursor
 					save_position();
 					
 					gotoxy(w.ws_col / 2 + 5, 0);
 					
 					printf("Ligado   ");
 
+					// volta para a posicao do cursor salva
 					reset_position();
 				}
 
@@ -149,6 +156,10 @@ int main(int argc, char *argv[])
 	return 0;
 }
 
+/*
+* Ao receber o sinal de interrupção essa função é chamada. Ela fecha os sockets abertos
+* e destroi o mutex criado, saindo do programa em seguida
+*/
 void down_client()
 {
 	printf("\nDerrubando o cliente...\n");
@@ -162,21 +173,29 @@ void down_client()
 	exit(0);
 }
 
+/*
+*	Habilida o socket a aceitar uma nova comunicacao
+*	Return: Descritor do socket
+*/
 int do_connect(int port)
 {
 	struct sockaddr_in addr_struct;
 	int socket_descriptor;
 
-	if ((socket_descriptor = socket(AF_INET, SOCK_STREAM, 0)) == -1) 
+	// Cria um novo socket
+	socket_descriptor = socket(AF_INET, SOCK_STREAM, 0);
+	if ( socket_descriptor == -1)
 	{
 		errx(1, "Erro ao criar o socket");
 	}
 
+	// Define as propriedades da conexao
 	addr_struct.sin_family = AF_INET;
 	addr_struct.sin_port = htons(port);
 	addr_struct.sin_addr.s_addr = inet_addr(ip);
 	bzero(&(addr_struct.sin_zero), 8);
 
+	// Cria uma conexao com as propriedades passadas
 	if (connect(socket_descriptor,(struct sockaddr *)&addr_struct, sizeof(struct sockaddr)) ==-1) 
 	{
 		close(socket_descriptor);
@@ -186,6 +205,10 @@ int do_connect(int port)
 	return socket_descriptor;
 }
 
+/*
+* Faz requisita ao servidor a temperatura atual
+* Return: temperatura atual
+*/
 float get_temperature()
 {
 	char *mensage = "get_temperature";
@@ -214,13 +237,18 @@ float get_temperature()
 	return temp;
 }
 
-void* monitoring_temperature()
+/*
+* Imprime a temperatura atual em um intervalo de tempo especifico
+*/
+void* print_temperature()
 {
 	while(1)
 	{
+		// Se conecta ao servidor na porta especifica da temperatura
 		socket_descriptor_temp = do_connect(PORT_TEMP);
 		float temp = get_temperature();
 
+		// realiza o controle para o acesso a temperatura 
 		pthread_mutex_lock(&mutexLock);
 			temperature = temp;
 		pthread_mutex_unlock(&mutexLock);
@@ -242,24 +270,30 @@ void* monitoring_temperature()
 	close(socket_descriptor_temp);
 }
 
+/*
+* Funcao responsavel por setar um estado ao arcondicionado(Ligar/Desligar)
+*/
 bool air_conditioning(bool status)
 {
+	// Faz a conexao com o servidor na porta especificada
 	socket_descriptor_air = do_connect(PORT_AIR);
 
-	char mensage[3];
+	char mensage[4];
 	if(status)
 		strcpy(mensage, "on");
 	else
-		strcpy(mensage, "of");
+		strcpy(mensage, "off");
 
 	int length = strlen(mensage) + 1;
 
+	// Envia o tamanho da mensagem que sera enviada ao servidor
 	if (send(socket_descriptor_air, &length, sizeof(length), 0) == -1)
 	{
 		close(socket_descriptor_air);
 		errx(1, "Erro ao enviar mensagem ao servidor");
 	}
 
+	// Envia a mensagem ao servido
 	if (send(socket_descriptor_air, mensage, length, 0) == -1)
 	{
 		close(socket_descriptor_air);
@@ -267,6 +301,7 @@ bool air_conditioning(bool status)
 	}
 
 
+	// Recebe a resposta do servidor
 	bool result;
 	if (recv(socket_descriptor_air, &result, sizeof(result), 0) == -1) 
 	{
@@ -277,24 +312,36 @@ bool air_conditioning(bool status)
 	return result;
 }
 
+/*
+* Funcao que posiciona o curso em uma dada coordenada
+*/
 void gotoxy(int x, int y)
 {
 	printf("\033[%d;%df", y, x);
 	fflush(stdout);
 }
 
+/*
+* Funcao salva a posicao atual do cursor
+*/
 void save_position()
 {
 	printf("\033[s");
 	fflush(stdout);
 }
 
+/*
+* Funcao que restaura o cursor para a posicao previamente salva
+*/
 void reset_position()
 {
 	printf("\033[u");
 	fflush(stdout);
 }
 
+/*
+* Funcao que imprime o tempo de execucao do programa
+*/
 void* running_time()
 {
 	int i=0,j=0,k=0;
