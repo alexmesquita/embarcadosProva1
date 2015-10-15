@@ -1,5 +1,5 @@
+#include <arpa/inet.h>
 #include <err.h>
-#include <errno.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -13,15 +13,18 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <termios.h>
+#include <time.h>
 
-#define PORT_TEMP 8080
-#define PORT_AIR 3000
+#define PORT_TEMP 9000
+#define PORT_AIR 7000
 
 void down_server();
 int do_connect(int port);
 void* receive_request_temp();
+float get_temp_uart();
 void* receive_request_air();
 bool change_air_state(bool state);
+void logger(char * message);
 
 char *ip = "192.168.1.5";
 int descriptor_server_temp = 0;
@@ -79,7 +82,8 @@ main(int argc, char *argv[])
 */
 void down_server()
 {
-	printf("\nDerrubando o servidor...\n");
+	logger("Derrubando o servidor\n");
+
 	if(descriptor_server_temp)
 	{
 		close(descriptor_server_temp);
@@ -107,6 +111,10 @@ void down_server()
 */
 int do_connect(int port)
 {
+	char up[30];
+
+	sprintf(up, "Subindo o Servidor na porta: %d\n", port);
+	logger(up);
 	struct sockaddr_in addr_server;
 	int descriptor_server;
 
@@ -173,10 +181,13 @@ void* receive_request_temp()
 
 		if(strcmp("get_temperature", text) == 0)
 		{
-			printf("Servidor: requisicao de temperatura recebida!\n");
-			
-			// float temperature = get_temp_uart();
-			float temperature = 22.55;
+			char message[100];
+
+			sprintf(message, "Servidor: requisicao de temperatura recebida. Do cliente: %s!\n", inet_ntoa(addr_client.sin_addr));
+			logger(message);
+
+			float temperature = get_temp_uart();
+			// float temperature = 22.55;
 			if (send(descriptor_client_temp, &temperature, sizeof(temperature), 0) == -1)
 			{
 				close(descriptor_client_temp);
@@ -291,17 +302,17 @@ void* receive_request_air()
 		// Verifica se a mensagem recebida é para ligar ou desligar o ar condicionado
 		if(strcmp("on", text) == 0)
 		{
-			printf("Servidor: requisicao de ar condicionado recebida!\n");
+			logger("Servidor: requisicao de ligar o ar condicionado recebida!\n");
 			result = true;
 		}
 		else if(strcmp("off", text) == 0)
 		{
-			printf("Servidor: requisicao de ar condicionado recebida!\n");
+			printf("Servidor: requisicao de desligar o ar condicionado recebida!\n");
 			result = false;
 		}
 
 		// muda o estado do ar condicionado via uart
-		// result = change_air_state(result);
+		result = change_air_state(result);
 		if (send(descriptor_client_air, &result, sizeof(result), 0) == -1)
 		{
 			close(descriptor_client_air);
@@ -355,7 +366,7 @@ bool change_air_state(bool state)
 		return false;
 	}
 
-	sleep(1);
+	sleep(2);
 
 	char buffer_result;
 
@@ -381,4 +392,18 @@ bool change_air_state(bool state)
 
 	close(uart_descriptor);
 	return result;
+}
+
+void logger(char * message)
+{
+	long hour;
+
+	time(&hour);
+
+	FILE* f_log = fopen("./server.log", "a+");
+
+	fprintf(f_log, "%s", ctime(&hour));
+	fprintf(f_log, "\t %s\n", message);
+
+	fclose(f_log);
 }

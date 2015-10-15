@@ -12,8 +12,8 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#define PORT_TEMP 8080
-#define PORT_AIR 3000
+#define PORT_TEMP 9000
+#define PORT_AIR 7000
 
 int do_connect(int port);
 float get_temperature();
@@ -27,7 +27,7 @@ void* running_time();
 
 volatile float temperature = 0;
 static pthread_mutex_t mutexLock;
-char *ip = "192.168.1.5";
+char *ip = "15.0.62.18";
 int socket_descriptor_temp = 0;
 int socket_descriptor_air = 0;
 
@@ -196,7 +196,7 @@ int do_connect(int port)
 	bzero(&(addr_struct.sin_zero), 8);
 
 	// Cria uma conexao com as propriedades passadas
-	if (connect(socket_descriptor,(struct sockaddr *)&addr_struct, sizeof(struct sockaddr)) ==-1) 
+	if (connect(socket_descriptor,(struct sockaddr *) &addr_struct, sizeof(struct sockaddr)) == -1) 
 	{
 		close(socket_descriptor);
 		errx(1, "Erro ao conectar com o servidor");
@@ -264,7 +264,7 @@ void* print_temperature()
 
 		reset_position();
 
-		sleep(2);
+		sleep(5);
 	}
 	
 	close(socket_descriptor_temp);
