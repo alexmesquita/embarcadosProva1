@@ -239,23 +239,35 @@ float get_temp_uart()
 	char buffer_temp[4];
 
 	// Lê 4 bytes da uart
-	int m = read(uart_descriptor, (void*)buffer_temp, 4);
+	int m = read(uart_descriptor, (void*)buffer_temp, 1);
 
 	float temp;
-	// verifica se houve erra na leitura, caso tenha ocorrido é retornado -273.15 (Zero absoluto) 
-	if (m < 0)
+	
+	if(buffer_temp[0] != 0xE1 && m == 1)
 	{
-	  perror("Erro ao ler a temperatura");
-	  temp = -273.15;
+		m = read(uart_descriptor, (void*)(buffer_temp + 1), 3);
+		
+		// verifica se houve erra na leitura, caso tenha ocorrido é retornado -273.15 (Zero absoluto) 
+		if (m < 0)
+		{
+		  perror("Erro ao ler a temperatura");
+		  temp = -273.15;
+		}
+		else if (m == 0)
+		{
+			printf("Sem dados na porta\n");
+			temp = -273.15;
+		}
+		else
+		{
+			// seta na variavel do tipo float a temperatura
+			memcpy(&temp, buffer_temp, 4);
+		}
 	}
-	else if (m == 0)
+	else
 	{
-		printf("Sem dados na porta\n");
 		temp = -273.15;
 	}
-
-	// seta na variavel do tipo float a temperatura
-	memcpy(&temp, buffer_temp, 4);
 
 	close(uart_descriptor);
 	return temp;
@@ -370,8 +382,8 @@ bool change_air_state(bool state)
 
 	char buffer_result;
 
-	int m = 0;
-	// int m = read(uart_descriptor, (void*) &buffer_result, 1);
+	// int m = 0;
+	int m = read(uart_descriptor, (void*) &buffer_result, 1);
 
 	bool result;
 	if (m <= 0)
@@ -394,6 +406,9 @@ bool change_air_state(bool state)
 	return result;
 }
 
+/*
+* Funcao responsavel por salvar o log no arquivo "server.log"
+*/
 void logger(char * message)
 {
 	long hour;

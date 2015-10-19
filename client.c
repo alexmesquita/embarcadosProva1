@@ -24,6 +24,7 @@ void gotoxy(int x, int y);
 void save_position();
 void reset_position();
 void* running_time();
+void print_menu();
 
 volatile float temperature = 0;
 static pthread_mutex_t mutexLock;
@@ -69,20 +70,7 @@ int main(int argc, char *argv[])
 		errx(1, "Erro ao criar a thread");
 	}
 
-	system("clear");
-
-	struct winsize w; // Estrutura para armazenar o tamanho da janela do terminal
-	ioctl(STDOUT_FILENO, TIOCGWINSZ, &w); // Seta os valores de tamanho da tela na estrutura winsize
-
-	// seta a posicao do cursor
-	gotoxy(w.ws_col / 2 - 12, 0);
-	printf("Ar Condicionado: Desligado");
-	
-	printf("\n\nEscolha uma opcao: \n");
-	printf("1 - Ligar o ar condicionado\n");
-	printf("2 - Desligar o ar condicionado\n");
-	printf("3 - Sair\n");
-	printf("->");
+	print_menu();
 
 	while(1)
 	{
@@ -96,12 +84,12 @@ int main(int argc, char *argv[])
 				{
 					printf("O ar condicionado foi ligado com sucesso, pressione Enter");
 					
-					ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-					
 					// salva a posicao atual do cursor
 					save_position();
 					
-					gotoxy(w.ws_col / 2 + 5, 0);
+					// verifica a largura da tela
+					int w = screen_size();
+					gotoxy(w / 2 + 5, 0);
 					
 					printf("Ligado   ");
 
@@ -120,14 +108,16 @@ int main(int argc, char *argv[])
 				{
 					printf("O ar condicionado foi desligado com sucesso, pressione Enter");
 
-					ioctl(STDOUT_FILENO, TIOCGWINSZ, &w);
-					
+					// salva a posicao atual do cursor
 					save_position();
 					
-					gotoxy(w.ws_col / 2 + 5, 0);
+					// verifica a largura da tela
+					int w = screen_size();
+					gotoxy(w / 2 + 5, 0);
 					
-					printf("Desligado");
+					printf("Ligado   ");
 
+					// volta para a posicao do cursor salva
 					reset_position();
 				}
 				else
@@ -206,7 +196,7 @@ int do_connect(int port)
 }
 
 /*
-* Faz requisita ao servidor a temperatura atual
+* Faz uma requisição ao servidor sobre a temperatura atual
 * Return: temperatura atual
 */
 float get_temperature()
@@ -253,15 +243,20 @@ void* print_temperature()
 			temperature = temp;
 		pthread_mutex_unlock(&mutexLock);
 
-		struct winsize w;
-		ioctl(STDOUT_FILENO, TIOCGWINSZ, &w); // retorna em w o tamanho da janela do terminal
+		int w = screen_size();
 
 		save_position();
 
-		gotoxy(w.ws_col - 23, 0);
+		gotoxy(w - 23, 0);
 
-		printf("Temperatura atual: %.2f\n", temperature);
-
+		if(temperature > -273)
+		{
+			printf("Temperatura atual: %.2f\n", temperature);
+		}
+		else
+		{
+			printf("Temperatura atual: ERRO\n");	
+		}
 		reset_position();
 
 		sleep(5);
@@ -372,4 +367,37 @@ void* running_time()
 		}
 	}
 	return NULL;
+}
+
+/*
+*	Funcao que imprime o menu
+*/
+void print_menu()
+{
+	system("clear");
+
+	int w = screen_size();
+
+	// seta a posicao do cursor
+	gotoxy(w / 2 - 12, 0);
+	printf("Ar Condicionado: Desligado");
+	
+	printf("\n\nEscolha uma opcao: \n");
+	printf("1 - Ligar o ar condicionado\n");
+	printf("2 - Desligar o ar condicionado\n");
+	printf("3 - Sair\n");
+	printf("->");
+}
+
+/*
+* Função que retorna a largura da tela
+*/
+int screen_size()
+{
+	// Estrutura para armazenar o tamanho da janela do terminal
+	struct winsize win;
+	// Seta os valores de tamanho da tela na estrutura winsize
+	ioctl(STDOUT_FILENO, TIOCGWINSZ, &win);
+
+	return win.ws_col;
 }
